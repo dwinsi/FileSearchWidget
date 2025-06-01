@@ -3,38 +3,51 @@ package com.example.filesearchwidget.util
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Environment
-import android.provider.MediaStore
 import android.util.Log
-import android.util.Size
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import androidx.core.net.toUri
 import java.io.File
 import java.io.FileOutputStream
 
 object ThumbnailUtils {
 
-    private const val THUMBNAIL_SIZE = 96
-    private const val TAG = "ThumbnailUtils"
+    fun generateThumbnailUri(context: Context, fileUri: Uri, mimeType: String?): Uri? {
+        return try {
+            when {
+                mimeType?.startsWith("image") == true ||
+                        mimeType?.startsWith("video") == true -> {
+                    // Use loadThumbnail for images/videos (API 29+)
+                    val bitmap: Bitmap = context.contentResolver.loadThumbnail(fileUri, android.util.Size(96, 96), null)
+                    saveBitmapToCacheAndGetUri(context, bitmap)
+                }
 
-    /**
-     * Generates a thumbnail for a given content Uri and stores it in the app's cache directory.
-     * Returns a file Uri pointing to the generated thumbnail image.
-     */
-    suspend fun generateThumbnailUri(context: Context, uri: Uri): Uri? = withContext(Dispatchers.IO) {
-        try {
-            val bitmap: Bitmap = context.contentResolver.loadThumbnail(uri, Size(THUMBNAIL_SIZE, THUMBNAIL_SIZE), null)
+                mimeType?.startsWith("audio") == true -> {
+                    // No thumbnail for audio, return placeholder
+                    getAudioPlaceholderUri(context)
+                }
 
-            val thumbFile = File(context.cacheDir, "thumb_${uri.hashCode()}.jpg")
-            FileOutputStream(thumbFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                else -> getFilePlaceholderUri(context)
             }
-
-            bitmap.recycle() // free memory
-            Uri.fromFile(thumbFile)
         } catch (e: Exception) {
-            Log.e(TAG, "Error generating thumbnail for $uri", e)
-            null
+            Log.w("ThumbnailUtils", "Thumbnail generation failed: ${e.message}")
+            getFilePlaceholderUri(context)
         }
+    }
+
+    private fun getAudioPlaceholderUri(context: Context): Uri =
+        "android.resource://${context.packageName}/drawable/ic_audio_placeholder".toUri()
+
+    private fun getFilePlaceholderUri(context: Context): Uri =
+        "android.resource://${context.packageName}/drawable/ic_file_placeholder".toUri()
+
+    private fun saveBitmapToCacheAndGetUri(context: Context, bitmap: Bitmap): Uri {
+        val cacheDir = File(context.cacheDir, "thumbnails")
+        if (!cacheDir.exists()) cacheDir.mkdirs()
+
+        val file = File(cacheDir, "${System.currentTimeMillis()}.png")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+
+        return file.toUri()
     }
 }

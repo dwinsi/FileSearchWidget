@@ -16,9 +16,9 @@ object MediaStoreQueryBuilder {
         val (sortColumn, sortDirection) = when (sortOrder?.lowercase()) {
             "name_asc" -> MediaStore.MediaColumns.DISPLAY_NAME to ContentResolver.QUERY_SORT_DIRECTION_ASCENDING
             "name_desc" -> MediaStore.MediaColumns.DISPLAY_NAME to ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
-            "oldest_first" -> MediaStore.MediaColumns.DATE_MODIFIED to ContentResolver.QUERY_SORT_DIRECTION_ASCENDING
-            "newest_first", null, "" -> MediaStore.MediaColumns.DATE_MODIFIED to ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
-            else -> MediaStore.MediaColumns.DATE_MODIFIED to ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
+            "oldest_first" -> MediaStore.MediaColumns.DATE_ADDED to ContentResolver.QUERY_SORT_DIRECTION_ASCENDING
+            "newest_first", null, "" -> MediaStore.MediaColumns.DATE_ADDED to ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
+            else -> MediaStore.MediaColumns.DATE_ADDED to ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
         }
 
         return Bundle().apply {

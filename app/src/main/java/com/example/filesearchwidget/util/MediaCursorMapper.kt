@@ -29,12 +29,7 @@ object MediaCursorMapper {
             val modifiedDateMillis = cursor.getLong(dateModifiedIndex) * 1000L
             val fileUri = ContentUris.withAppendedId(uri, id)
 
-            // Generate thumbnail URI only for images and videos
-            val thumbnailUri = if (mimeType?.startsWith("image") == true || mimeType?.startsWith("video") == true) {
-                ThumbnailUtils.generateThumbnailUri(context, fileUri)
-            } else {
-                null
-            }
+            val thumbnailUri = ThumbnailUtils.generateThumbnailUri(context, fileUri, mimeType)
 
             mediaList.add(
                 MediaFile(

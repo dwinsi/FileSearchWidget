@@ -10,5 +10,5 @@ data class MediaFile(
     val sizeBytes: Long?,              // File size in bytes
     val createdDateMillis: Long?,      // Date file was created
     val modifiedDateMillis: Long?,     // Date file was last modified
-    val thumbnailUri: Uri?             // Thumbnail URI (for images/videos)
+    val thumbnailUri: Uri? = null            // Thumbnail URI (for images/videos)
 )

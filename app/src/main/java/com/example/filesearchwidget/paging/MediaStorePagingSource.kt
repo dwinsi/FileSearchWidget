@@ -96,17 +96,16 @@ class MediaStorePagingSource(
 
             val sortedFiles = SortUtils.sortDocuments(allFiles, sortOrder)
 
-            val pageSize = params.loadSize
-            val start = params.key ?: 0
-            val end = (start + pageSize).coerceAtMost(sortedFiles.size)
-            val pageItems = sortedFiles.subList(start, end)
+            val pageItems = sortedFiles
 
-            val nextKey = if (end >= sortedFiles.size) null else end
-            val prevKey = if (start <= 0) null else start - pageSize
+            val currentPage = params.key ?: 0
+            val nextKey = if (pageItems.size < params.loadSize) null else currentPage + 1
+            val prevKey = if (currentPage == 0) null else currentPage - 1
 
             if (debug) {
-                Log.d(TAG, "Loaded ${pageItems.size} items. start=$start, end=$end, nextKey=$nextKey")
-                Log.d(TAG, "Matched files: ${pageItems.joinToString { it.displayName.toString() }}")
+                val currentPage = params.key ?: 0
+                Log.d(TAG, "Loaded ${pageItems.size} items on page $currentPage, nextKey=$nextKey")
+                Log.d(TAG, "Matched files: ${pageItems.joinToString { it.displayName ?: "Unnamed" }}")
             }
 
             LoadResult.Page(
