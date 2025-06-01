@@ -11,6 +11,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.filesearchwidget.model.MediaFile
 
+
 @Composable
 fun FileTabsScreen(
     viewModel: SearchViewModel,
@@ -21,6 +22,7 @@ fun FileTabsScreen(
     var selectedTabIndex by remember { mutableStateOf(0) }
 
     Column {
+        // Tabs
         TabRow(selectedTabIndex = selectedTabIndex) {
             tabTitles.forEachIndexed { index, title ->
                 Tab(
@@ -31,6 +33,7 @@ fun FileTabsScreen(
             }
         }
 
+        // Change media type when tab is selected
         LaunchedEffect(selectedTabIndex) {
             val type = when (selectedTabIndex) {
                 0 -> "image"
@@ -42,6 +45,17 @@ fun FileTabsScreen(
             viewModel.setMediaType(type)
         }
 
+        // Sort dropdown UI
+        val currentSortOrder by viewModel.sortOrder.collectAsState()
+        SortOrderDropdown(
+            selectedOrder = currentSortOrder,
+            onOrderSelected = { viewModel.setSortOrder(it) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+
+        // Tab-specific content
         when (selectedTabIndex) {
             3 -> DocumentTab(viewModel, onPickFolder, onFileClick)
             else -> FileTabContent(viewModel, onFileClick)
@@ -60,6 +74,7 @@ fun DocumentTab(
     val snackbarHostState = remember { SnackbarHostState() }
     var lastShownUri by remember { mutableStateOf<Uri?>(null) }
 
+    // Snackbar for folder selection
     LaunchedEffect(folderUri) {
         if (folderUri != lastShownUri) {
             lastShownUri = folderUri
@@ -72,11 +87,13 @@ fun DocumentTab(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Snackbar host
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
 
+        // Folder path and buttons
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -100,6 +117,7 @@ fun DocumentTab(
             }
         }
 
+        // Search box
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },
@@ -120,6 +138,7 @@ fun DocumentTab(
             }
         )
 
+        // Shared file listing
         FileTabContent(viewModel, onFileClick)
     }
 }

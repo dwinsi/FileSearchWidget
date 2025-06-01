@@ -1,106 +1,132 @@
 package com.example.filesearchwidget.paging
 
-import android.content.ContentResolver
-import android.content.ContentUris
 import android.content.Context
-import android.os.Bundle
+import android.net.Uri
 import android.provider.MediaStore
+import android.util.Log
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.example.filesearchwidget.model.MediaFile
-import android.net.Uri
+import com.example.filesearchwidget.util.MediaConstants
+import com.example.filesearchwidget.util.MediaCursorMapper
+import com.example.filesearchwidget.util.SortUtils
+import com.example.filesearchwidget.util.MediaStoreQueryBuilder
+import java.util.Locale
 
 class MediaStorePagingSource(
     private val context: Context,
-    private val mediaType: String,
-    private val searchQuery: String
+    mediaType: String,
+    private val searchQuery: String,
+    private val allowedMimeTypes: List<String>? = null,
+    private val minFileSizeBytes: Long? = null,
+    private val modifiedAfterMillis: Long? = null,
+    private val sortOrder: String? = SortUtils.DEFAULT_SORT_ORDER,
+    private val debug: Boolean = false
 ) : PagingSource<Int, MediaFile>() {
 
+    private val normalizedMediaType = mediaType.lowercase(Locale.getDefault())
+
+    init {
+        val validTypes = setOf(MediaType.IMAGE, MediaType.VIDEO, MediaType.AUDIO)
+        require(normalizedMediaType in validTypes) {
+            "Invalid mediaType: $mediaType. Must be one of $validTypes"
+        }
+    }
+
     override fun getRefreshKey(state: PagingState<Int, MediaFile>): Int? {
-        return state.anchorPosition?.let { anchorPosition ->
-            val anchorPage = state.closestPageToPosition(anchorPosition)
-            anchorPage?.prevKey?.plus(1) ?: anchorPage?.nextKey?.minus(1)
+        return state.anchorPosition?.let { position ->
+            val page = state.closestPageToPosition(position)
+            page?.prevKey?.plus(state.config.pageSize) ?: page?.nextKey?.minus(state.config.pageSize)
         }
     }
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, MediaFile> {
-        val page = params.key ?: 0
-        val pageSize = params.loadSize
-
-        val uri = when (mediaType) {
-            "image" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            "video" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-            "audio" -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            else -> MediaStore.Files.getContentUri("external")
-        }
-
-        val projection = arrayOf(
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns._ID,
-            MediaStore.MediaColumns.MIME_TYPE,
-            MediaStore.MediaColumns.SIZE,
-            MediaStore.MediaColumns.DATE_ADDED
-        )
-
-        val selection = if (searchQuery.isNotEmpty()) {
-            "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
-        } else null
-
-        val selectionArgs = if (searchQuery.isNotEmpty()) {
-            arrayOf("%$searchQuery%")
-        } else null
-
-        val queryArgs = Bundle().apply {
-            putInt(ContentResolver.QUERY_ARG_LIMIT, pageSize)
-            putInt(ContentResolver.QUERY_ARG_OFFSET, page * pageSize)
-            putString(ContentResolver.QUERY_ARG_SORT_COLUMNS, MediaStore.MediaColumns.DATE_ADDED)
-            putInt(ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
-            if (selection != null && selectionArgs != null) {
-                putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
-            }
-        }
-
         return try {
-            val mediaList = mutableListOf<MediaFile>()
+            if (debug) Log.d(TAG, "Loading MediaStore page with key=${params.key} and loadSize=${params.loadSize}")
+            if (debug) Log.d(TAG, "Media type used for query: $normalizedMediaType")
 
-            context.contentResolver.query(uri, projection, queryArgs, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
-                val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
-                val mimeTypeIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
-                val sizeIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
-                val dateAddedIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val uri: Uri = when (normalizedMediaType) {
+                MediaType.IMAGE -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                MediaType.VIDEO -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                MediaType.AUDIO -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                else -> MediaStore.Files.getContentUri("external") // Should never reach here because of validation
+            }
 
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idIndex)
-                    val name = cursor.getString(nameIndex)
-                    val mimeType = cursor.getString(mimeTypeIndex)
-                    val sizeBytes = cursor.getLong(sizeIndex)
-                    val dateAddedSeconds = cursor.getLong(dateAddedIndex)
-                    val createdDateMillis = dateAddedSeconds * 1000L
+            val selectionParts = mutableListOf<String>()
+            val selectionArgs = mutableListOf<String>()
 
-                    val fileUri = ContentUris.withAppendedId(uri, id)
+            if (searchQuery.isNotEmpty()) {
+                selectionParts.add("${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?")
+                selectionArgs.add("%$searchQuery%")
+            }
 
-                    mediaList.add(
-                        MediaFile(
-                            id = id,
-                            uri = fileUri,
-                            displayName = name,
-                            mimeType = mimeType,
-                            sizeBytes = sizeBytes,
-                            createdDateMillis = createdDateMillis
-                        )
-                    )
-                }
+            allowedMimeTypes?.takeIf { it.isNotEmpty() }?.let {
+                selectionParts.add("${MediaStore.MediaColumns.MIME_TYPE} IN (${it.joinToString(",") { "?" }})")
+                selectionArgs.addAll(it)
+            }
+
+            minFileSizeBytes?.takeIf { it > 0 }?.let {
+                selectionParts.add("${MediaStore.MediaColumns.SIZE} >= ?")
+                selectionArgs.add(it.toString())
+            }
+
+            modifiedAfterMillis?.takeIf { it > 0 }?.let {
+                selectionParts.add("${MediaStore.MediaColumns.DATE_MODIFIED} >= ?")
+                selectionArgs.add((it / 1000).toString())
+            }
+
+            val selection = if (selectionParts.isNotEmpty()) selectionParts.joinToString(" AND ") else null
+
+            val queryArgs = MediaStoreQueryBuilder.buildQueryArgs(
+                page = (params.key ?: 0),
+                pageSize = params.loadSize,
+                sortOrder = sortOrder,
+                selection = selection,
+                selectionArgs = selectionArgs.toTypedArray()
+            )
+
+            val allFiles = context.contentResolver.query(
+                uri,
+                MediaConstants.projection,
+                queryArgs,
+                null
+            )?.use { cursor ->
+                MediaCursorMapper.mapCursorToMediaFiles(context, cursor, uri)
+            } ?: emptyList()
+
+            val sortedFiles = SortUtils.sortDocuments(allFiles, sortOrder)
+
+            val pageSize = params.loadSize
+            val start = params.key ?: 0
+            val end = (start + pageSize).coerceAtMost(sortedFiles.size)
+            val pageItems = sortedFiles.subList(start, end)
+
+            val nextKey = if (end >= sortedFiles.size) null else end
+            val prevKey = if (start <= 0) null else start - pageSize
+
+            if (debug) {
+                Log.d(TAG, "Loaded ${pageItems.size} items. start=$start, end=$end, nextKey=$nextKey")
+                Log.d(TAG, "Matched files: ${pageItems.joinToString { it.displayName.toString() }}")
             }
 
             LoadResult.Page(
-                data = mediaList,
-                prevKey = if (page == 0) null else page - 1,
-                nextKey = if (mediaList.size < pageSize) null else page + 1
+                data = pageItems,
+                prevKey = prevKey,
+                nextKey = nextKey
             )
         } catch (e: Exception) {
+            if (debug) Log.e(TAG, "Error loading from MediaStore", e)
             LoadResult.Error(e)
         }
     }
+
+    companion object {
+        private const val TAG = "MediaStorePagingSource"
+    }
+}
+
+object MediaType {
+    const val IMAGE = "image"
+    const val VIDEO = "video"
+    const val AUDIO = "audio"
 }

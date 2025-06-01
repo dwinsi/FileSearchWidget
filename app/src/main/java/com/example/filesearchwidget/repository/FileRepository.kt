@@ -18,14 +18,22 @@ class FileRepository(private val context: Context) {
      * @param mediaType: "image", "video", "audio", or "document"
      * @param folderUri: required only for "document" mediaType (via SAF)
      * @param searchQuery: user's file name search input
-     * @param allowedExtensions: Optional list of allowed file extensions (for documents)
-     * @param debug: Enable debug logging
+     * @param allowedMimeTypes: optional list of allowed MIME types
+     * @param allowedExtensions: optional list of allowed file extensions (especially for documents)
+     * @param minFileSizeBytes: optional minimum file size in bytes
+     * @param modifiedAfterMillis: optional filter for files modified after this time (epoch millis)
+     * @param sortOrder: optional sort order string
+     * @param debug: enable debug logs
      */
     fun getMediaFiles(
         mediaType: String,
         folderUri: Uri?,
         searchQuery: String,
+        allowedMimeTypes: List<String>? = null,
         allowedExtensions: List<String>? = null,
+        minFileSizeBytes: Long? = null,
+        modifiedAfterMillis: Long? = null,
+        sortOrder: String? = null,
         debug: Boolean = false
     ): Flow<PagingData<MediaFile>> {
 
@@ -34,7 +42,16 @@ class FileRepository(private val context: Context) {
                 Pager(
                     config = PagingConfig(pageSize = 20),
                     pagingSourceFactory = {
-                        MediaStorePagingSource(context, mediaType, searchQuery)
+                        MediaStorePagingSource(
+                            context = context,
+                            mediaType = mediaType,
+                            searchQuery = searchQuery,
+                            allowedMimeTypes = allowedMimeTypes,
+                            minFileSizeBytes = minFileSizeBytes,
+                            modifiedAfterMillis = modifiedAfterMillis,
+                            sortOrder = sortOrder,
+                            debug = debug
+                        )
                     }
                 ).flow
             }
@@ -51,9 +68,11 @@ class FileRepository(private val context: Context) {
                             context = context,
                             folderUri = folderUri,
                             searchQuery = searchQuery,
-                            allowedExtensions = allowedExtensions, // Pass as is, null or empty means no filtering
-                            minFileSizeBytes = 0, // no min file size, get all files
-                            modifiedAfterMillis = 0L, // no date filtering
+                            allowedMimeTypes = allowedMimeTypes,
+                            allowedExtensions = allowedExtensions,
+                            minFileSizeBytes = minFileSizeBytes,
+                            modifiedAfterMillis = modifiedAfterMillis,
+                            sortOrder = sortOrder.toString(),
                             debug = debug
                         )
                     }

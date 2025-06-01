@@ -7,6 +7,8 @@ data class MediaFile(
     val uri: Uri,
     val displayName: String?,
     val mimeType: String?,
-    val sizeBytes: Long?,        // add this
-    val createdDateMillis: Long? // add this
+    val sizeBytes: Long?,              // File size in bytes
+    val createdDateMillis: Long?,      // Date file was created
+    val modifiedDateMillis: Long?,     // Date file was last modified
+    val thumbnailUri: Uri?             // Thumbnail URI (for images/videos)
 )

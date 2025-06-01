@@ -19,10 +19,8 @@ fun MediaList(
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         itemsIndexed(mediaFiles.itemSnapshotList.items) { _, item ->
-            if (item != null) {
-                MediaListItem(file = item) {
-                    onFileClick(item)
-                }
+            MediaListItem(file = item) {
+                onFileClick(item)
             }
         }
 

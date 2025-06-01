@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
@@ -14,8 +16,6 @@ import com.example.filesearchwidget.repository.FileRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
-import androidx.core.content.edit
-import androidx.core.net.toUri
 
 class SearchViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -33,11 +33,11 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
-    // Optional: enable debug logging
-    private val debug = true
+    private val _sortOrder = MutableStateFlow(SortOrder.NEWEST_FIRST)
+    val sortOrder: StateFlow<SortOrder> = _sortOrder
 
-    // Optional: define allowed file extensions for documents
-    private val allowedExtensions = listOf("pdf", "doc", "docx", "txt")
+    private val debug = true
+    private val allowedExtensions = listOf("pdf", "doc", "docx", "txt", "epub")
 
     init {
         loadPersistedFolderUri()
@@ -55,13 +55,11 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSelectedFolder(uri: Uri) {
         _folderUri.value = uri
-
         getApplication<Application>()
             .getSharedPreferences("prefs", Context.MODE_PRIVATE)
             .edit {
                 putString("folder_uri", uri.toString())
             }
-
         _needFolderSelection.value = false
     }
 
@@ -92,6 +90,10 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
         _needFolderSelection.value = true
     }
 
+    fun setSortOrder(order: SortOrder) {
+        _sortOrder.value = order
+    }
+
     fun openFile(context: Context, mediaFile: MediaFile) {
         try {
             val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -106,13 +108,12 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val mediaFiles: Flow<PagingData<MediaFile>> =
-        combine(_mediaType, _folderUri, _searchQuery) { type, folder, search ->
-            Triple(type, folder, search)
+        combine(_mediaType, _folderUri, _searchQuery, _sortOrder) { type, folder, search, sort ->
+            Quadruple(type, folder, search, sort)
         }
             .debounce(300)
-            .flatMapLatest { (type, folder, search) ->
+            .flatMapLatest { (type, folder, search, sort) ->
                 if (type == "document" && folder == null) {
-                    // Return empty PagingData if no folder selected for documents
                     flowOf(PagingData.empty())
                 } else {
                     repo.getMediaFiles(
@@ -120,9 +121,26 @@ class SearchViewModel(app: Application) : AndroidViewModel(app) {
                         folderUri = folder,
                         searchQuery = search,
                         allowedExtensions = allowedExtensions,
+                        sortOrder = sort.sortString, // ✅ Uses enum's built-in string
                         debug = debug
                     )
                 }
             }
             .cachedIn(viewModelScope)
 }
+
+// ✅ Enum with direct sort string mapping
+enum class SortOrder(val label: String, val sortString: String) {
+    NAME_ASC("Name (A-Z)", "name"),
+    NEWEST_FIRST("Newest First", "modified DESC"),
+    OLDEST_FIRST("Oldest First", "modified ASC");
+
+    override fun toString(): String = label
+}
+
+private data class Quadruple<A, B, C, D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D
+)

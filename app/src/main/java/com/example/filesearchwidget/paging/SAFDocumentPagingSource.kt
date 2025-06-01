@@ -7,6 +7,9 @@ import android.util.Log
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.example.filesearchwidget.model.MediaFile
+import com.example.filesearchwidget.util.FileFilterUtils
+import com.example.filesearchwidget.util.ProjectionUtils
+import com.example.filesearchwidget.util.SortUtils
 
 class SAFDocumentPagingSource(
     private val context: Context,
@@ -16,14 +19,9 @@ class SAFDocumentPagingSource(
     private val allowedExtensions: List<String>? = null,
     private val minFileSizeBytes: Long? = null,
     private val modifiedAfterMillis: Long? = null,
+    private val sortOrder: String = SortUtils.DEFAULT_SORT_ORDER,
     private val debug: Boolean = false
 ) : PagingSource<Int, MediaFile>() {
-
-    private fun hasAllowedExtension(name: String): Boolean {
-        if (allowedExtensions.isNullOrEmpty()) return true
-        val lowerName = name.lowercase()
-        return allowedExtensions.any { ext -> lowerName.endsWith(".$ext") }
-    }
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, MediaFile> {
         return try {
@@ -38,16 +36,10 @@ class SAFDocumentPagingSource(
 
             context.contentResolver.query(
                 childrenUri,
-                arrayOf(
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE,
-                    DocumentsContract.Document.COLUMN_SIZE,
-                    DocumentsContract.Document.COLUMN_LAST_MODIFIED
-                ),
+                ProjectionUtils.SAF_PROJECTION,
                 null,
                 null,
-                "${DocumentsContract.Document.COLUMN_DISPLAY_NAME} ASC"
+                null  // Ignore SAF sort order, we will sort manually
             )?.use { cursor ->
                 val nameIdx = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                 val docIdIdx = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
@@ -61,39 +53,43 @@ class SAFDocumentPagingSource(
                     val size = cursor.getLong(sizeIdx)
                     val modifiedTime = cursor.getLong(modifiedIdx)
 
-                    if (searchQuery.isNotEmpty() && !name.contains(searchQuery, ignoreCase = true)) continue
-                    if (!allowedMimeTypes.isNullOrEmpty() && allowedMimeTypes.none { mimeType.startsWith(it) || mimeType == it }) continue
-                    if (!hasAllowedExtension(name)) continue
-                    if (minFileSizeBytes != null && size < minFileSizeBytes) continue
-                    if (modifiedAfterMillis != null && modifiedTime < modifiedAfterMillis) continue
+                    if (!FileFilterUtils.matchesSearchQuery(name, searchQuery)) continue
+                    if (!FileFilterUtils.matchesMimeType(mimeType, allowedMimeTypes)) continue
+                    if (!FileFilterUtils.hasAllowedExtension(name, allowedExtensions)) continue
+                    if (!FileFilterUtils.isAboveMinSize(size, minFileSizeBytes)) continue
+                    if (!FileFilterUtils.isModifiedAfter(modifiedTime, modifiedAfterMillis)) continue
 
                     val docId = cursor.getString(docIdIdx)
                     val docUri = DocumentsContract.buildDocumentUriUsingTree(folderUri, docId)
 
-                    // Add size and createdDateMillis (modifiedTime here)
                     allFiles.add(
                         MediaFile(
-                            id = docId.hashCode().toLong(),  // Generate a long ID from String
+                            id = docId.hashCode().toLong(),
                             uri = docUri,
                             displayName = name,
                             mimeType = mimeType,
                             sizeBytes = size,
-                            createdDateMillis = modifiedTime
+                            createdDateMillis = modifiedTime,
+                            modifiedDateMillis = modifiedTime,
+                            thumbnailUri = null
                         )
                     )
                 }
             }
 
+            val sortedFiles = SortUtils.sortDocuments(allFiles, sortOrder)
+
             val pageSize = params.loadSize
             val start = params.key ?: 0
-            val end = (start + pageSize).coerceAtMost(allFiles.size)
-            val pageItems = allFiles.subList(start, end)
+            val end = (start + pageSize).coerceAtMost(sortedFiles.size)
+            val pageItems = sortedFiles.subList(start, end)
 
-            val nextKey = if (end < allFiles.size) end else null
-            val prevKey = if (start == 0) null else (start - pageSize).coerceAtLeast(0)
+            val nextKey = if (end >= sortedFiles.size) null else end
+            val prevKey = if (start <= 0) null else start - pageSize
 
             if (debug) {
                 Log.d(TAG, "Loaded ${pageItems.size} items. start=$start, end=$end, nextKey=$nextKey, prevKey=$prevKey")
+                Log.d(TAG, "Matched files: ${pageItems.joinToString { it.displayName.toString() }}")
             }
 
             LoadResult.Page(
