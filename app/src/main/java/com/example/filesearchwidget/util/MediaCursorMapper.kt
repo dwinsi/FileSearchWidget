@@ -4,13 +4,14 @@ import android.content.ContentUris
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
+import android.util.Size
 import com.example.filesearchwidget.model.MediaFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object MediaCursorMapper {
 
-    suspend fun mapCursorToMediaFiles(context: Context, cursor: Cursor, uri: Uri): List<MediaFile> = withContext(Dispatchers.IO) {
+    suspend fun mapCursorToMediaFiles(context: Context, cursor: Cursor, uri: Uri, thumbnailSize: Size = Size(720, 720)): List<MediaFile> = withContext(Dispatchers.IO) {
         val nameIndex = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns.DISPLAY_NAME)
         val idIndex = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID)
         val mimeTypeIndex = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns.MIME_TYPE)
@@ -29,7 +30,7 @@ object MediaCursorMapper {
             val modifiedDateMillis = cursor.getLong(dateModifiedIndex) * 1000L
             val fileUri = ContentUris.withAppendedId(uri, id)
 
-            val thumbnailUri = ThumbnailUtils.generateThumbnailUri(context, fileUri, mimeType)
+            val thumbnailUri = ThumbnailUtils.generateThumbnailUri(context, fileUri, mimeType, thumbnailSize)
 
             mediaList.add(
                 MediaFile(

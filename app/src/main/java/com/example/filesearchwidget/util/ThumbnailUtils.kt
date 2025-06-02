@@ -10,13 +10,13 @@ import java.io.FileOutputStream
 
 object ThumbnailUtils {
 
-    fun generateThumbnailUri(context: Context, fileUri: Uri, mimeType: String?): Uri? {
+    fun generateThumbnailUri(context: Context, fileUri: Uri, mimeType: String?, desiredSize: android.util.Size = android.util.Size(512, 512)): Uri? {
         return try {
             when {
                 mimeType?.startsWith("image") == true ||
                         mimeType?.startsWith("video") == true -> {
                     // Use loadThumbnail for images/videos (API 29+)
-                    val bitmap: Bitmap = context.contentResolver.loadThumbnail(fileUri, android.util.Size(96, 96), null)
+                    val bitmap: Bitmap = context.contentResolver.loadThumbnail(fileUri, desiredSize, null)
                     saveBitmapToCacheAndGetUri(context, bitmap)
                 }
 

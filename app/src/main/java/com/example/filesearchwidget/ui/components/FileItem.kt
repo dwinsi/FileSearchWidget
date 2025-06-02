@@ -24,7 +24,8 @@ import java.util.*
 @Composable
 fun FileItem(
     file: MediaFile,
-    onClick: (MediaFile) -> Unit
+    onClick: (MediaFile) -> Unit,
+    compact: Boolean = false // <- New parameter
 ) {
     val dateFormatter = remember {
         SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
@@ -41,54 +42,91 @@ fun FileItem(
         }
     }
 
+    val imageSize = if (compact) 96.dp else 64.dp
+    val padding = if (compact) 4.dp else 8.dp
+
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp)
-            .clickable { onClick(file) },
+            .padding(padding)
+            .clickable { onClick(file) }
+            .then(
+                if (compact) Modifier.fillMaxWidth() else Modifier.fillMaxWidth()
+            ),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
-        Row(modifier = Modifier.padding(16.dp)) {
-            AsyncImage(
-                model = file.thumbnailUri ?: file.uri,
-                contentDescription = file.displayName,
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.LightGray),
-                contentScale = ContentScale.Crop,
-                placeholder = painterResource(R.drawable.ic_file_placeholder),
-                error = painterResource(R.drawable.ic_file_placeholder)
-            )
+        if (compact) {
+            // Grid mode - vertical layout
+            Column(
+                modifier = Modifier.padding(padding),
+                verticalArrangement = Arrangement.Center
+            ) {
+                AsyncImage(
+                    model = file.thumbnailUri ?: file.uri,
+                    contentDescription = file.displayName,
+                    modifier = Modifier
+                        .size(imageSize)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.LightGray)
+                        .align(alignment = androidx.compose.ui.Alignment.CenterHorizontally),
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(R.drawable.ic_file_placeholder),
+                    error = painterResource(R.drawable.ic_file_placeholder)
+                )
 
-            Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.displayName ?: "Unnamed File",
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = file.mimeType ?: "Unknown Type",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+            }
+        } else {
+            // List mode - horizontal layout
+            Row(modifier = Modifier.padding(16.dp)) {
+                AsyncImage(
+                    model = file.thumbnailUri ?: file.uri,
+                    contentDescription = file.displayName,
+                    modifier = Modifier
+                        .size(imageSize)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.LightGray),
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(R.drawable.ic_file_placeholder),
+                    error = painterResource(R.drawable.ic_file_placeholder)
+                )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = formatFileSize(file.sizeBytes),
+                        text = file.displayName ?: "Unnamed File",
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = file.mimeType ?: "Unknown Type",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = file.createdDateMillis?.let { dateFormatter.format(Date(it)) } ?: "Unknown date",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = formatFileSize(file.sizeBytes),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = file.createdDateMillis?.let { dateFormatter.format(Date(it)) } ?: "Unknown date",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

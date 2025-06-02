@@ -4,13 +4,14 @@ import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.filesearchwidget.model.MediaFile
-
 
 @Composable
 fun FileTabsScreen(
@@ -20,6 +21,7 @@ fun FileTabsScreen(
 ) {
     val tabTitles = listOf("Photos", "Videos", "Audio", "Documents")
     var selectedTabIndex by remember { mutableStateOf(0) }
+    var isGridView by remember { mutableStateOf(false) } // <-- New: Grid/List toggle state
 
     Column {
         // Tabs
@@ -55,10 +57,25 @@ fun FileTabsScreen(
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         )
 
+        // 🔁 Grid/List Toggle Button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            IconButton(onClick = { isGridView = !isGridView }) {
+                Icon(
+                    imageVector = if (isGridView) Icons.Default.List else Icons.Default.MoreVert,
+                    contentDescription = "Toggle View"
+                )
+            }
+        }
+
         // Tab-specific content
         when (selectedTabIndex) {
-            3 -> DocumentTab(viewModel, onPickFolder, onFileClick)
-            else -> FileTabContent(viewModel, onFileClick)
+            3 -> DocumentTab(viewModel, onPickFolder, onFileClick, isGridView) // ⬅️ Pass isGridView
+            else -> FileTabContent(viewModel, onFileClick, isGridView)
         }
     }
 }
@@ -67,7 +84,8 @@ fun FileTabsScreen(
 fun DocumentTab(
     viewModel: SearchViewModel,
     onPickFolder: () -> Unit,
-    onFileClick: (MediaFile) -> Unit
+    onFileClick: (MediaFile) -> Unit,
+    isGridView: Boolean // ⬅️ New param
 ) {
     val folderUri by viewModel.folderUri.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -87,7 +105,6 @@ fun DocumentTab(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Snackbar host
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -138,7 +155,7 @@ fun DocumentTab(
             }
         )
 
-        // Shared file listing
-        FileTabContent(viewModel, onFileClick)
+        // Shared file listing with grid/list mode
+        FileTabContent(viewModel, onFileClick, isGridView)
     }
 }
